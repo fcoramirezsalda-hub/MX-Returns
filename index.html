@@ -132,7 +132,7 @@ const EN_APPS_SCRIPT=typeof google!=='undefined'&&google.script&&google.script.r
 const API={url:localGet('api')||'',k:localGet('k')||''};
 (function leerEnlace(){ // enlace de configuración: ...#api=<URL /exec>&k=<código>
  const h=new URLSearchParams(location.hash.slice(1));
- if(h.get('api')){API.url=h.get('api');localSet('api',API.url);}
+ if(h.get('api')){API.url=h.get('api').replace(/\/macros\/u\/\d+\//,'/macros/');localSet('api',API.url);}
  if(h.get('k')){API.k=h.get('k').toUpperCase();localSet('k',API.k);}
  if(h.get('api')||h.get('k'))history.replaceState(null,'',location.pathname+location.search);
 })();
@@ -151,7 +151,8 @@ function configurar(aviso){
   <div class="opts"><button onclick="guardarConfig()">Guardar y conectar</button></div>`,true);
 }
 function guardarConfig(){
- API.url=$('cfgUrl').value.trim();API.k=$('cfgK').value.trim().toUpperCase();
+ // Quita el número de cuenta (/u/1/) que Google agrega cuando hay varias cuentas abiertas.
+ API.url=$('cfgUrl').value.trim().replace(/\/macros\/u\/\d+\//,'/macros/');API.k=$('cfgK').value.trim().toUpperCase();
  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(API.url)){toast('La URL debe terminar en /exec','err');return;}
  localSet('api',API.url);localSet('k',API.k);cerrarModal();iniciar();
 }
@@ -167,7 +168,13 @@ function aviso(tipo){if(tipo==='ok')tono(1200,90);else if(tipo==='warn')tono(800
 // ---- Inicio ----
 function iniciar(){$('estadoCola').textContent='Conectando…';
  run('appInicio').then(cfg=>{S.cfg=cfg;S.resumen=cfg.resumen;$('estadoCola').textContent='Listo';pintarContexto();if(!S.operador)elegirOperador();foco();})
- .catch(e=>{$('estadoCola').textContent='Sin conexión: '+e.message;});}
+ .catch(e=>{$('estadoCola').textContent='Sin conexión: '+e.message;
+  // En la página propia, un error de conexión casi siempre es la URL o el código: se muestran para corregirlos.
+  if(!EN_APPS_SCRIPT&&!modalAbierto)configurar(mensajeConexion(e));});}
+function mensajeConexion(e){const m=String(e&&e.message||e);
+ if(/40[45]/.test(m))return 'No se pudo conectar ('+m+'). Revisa que la URL sea la de la aplicación web del proyecto "Escaneo Retornos — Eyoyo" (Implementar → Administrar implementaciones) y que termine en /exec.';
+ if(/Failed to fetch|NetworkError|Load failed/i.test(m))return 'No se pudo conectar. Revisa la URL, que la app esté publicada con acceso "Cualquier persona" y que el teléfono tenga internet.';
+ return 'No se pudo conectar: '+m;}
 
 function pintarContexto(){
  const c=S.cfg;if(!c)return;
@@ -183,7 +190,8 @@ function pintarContexto(){
   :'Paquete grande: elige el rack (o déjalo vacío y asígnalo después).';
 }
 function elegirOperador(){
- const ops=(S.cfg&&S.cfg.operadores)||[];
+ if(!S.cfg){if(!EN_APPS_SCRIPT)configurar('Primero conecta el teléfono con la hoja.');else toast('Sin conexión con la hoja','err');return;}
+ const ops=S.cfg.operadores||[];
  modal(`<h3>¿Quién escanea?</h3><div class="opts">${ops.map(o=>`<button onclick="setOp('${esc(o)}')">${esc(o)}</button>`).join('')}</div>
   <p class="meta">Para agregar operadores, edita la columna Operador en la pestaña Catálogos.</p>`);
 }
