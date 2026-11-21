@@ -237,7 +237,7 @@ function encolar(raw){
 }
 function claveLocal(raw){let g=String(raw).replace(/^\]C1/i,'').replace(/[\s\x1d]/g,'').toUpperCase();
  if(/^JJD/.test(g))return g.slice(1);
- if(/^(?:10\d{18}00\d{12}|96\d{32})$/.test(g)){const t=g.slice(20);return t.startsWith('00')?t.slice(2):t;}
+ if(/^(?:\d{20}00\d{12}|96\d{32})$/.test(g)){const t=g.slice(20);return t.startsWith('00')?t.slice(2):t;}
  return g;}
 async function procesarCola(){
  if(S.procesando)return;S.procesando=true;
