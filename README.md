@@ -16,7 +16,7 @@ Si la página pide **Conectar con la hoja**, escribe la URL de la app (termina e
 ## Enlace de configuración
 
 ```
-https://fcoramirezsalda-hub.github.io/mx-returns/#api=<URL de la app /exec>&k=<código de acceso>
+https://fcoramirezsalda-hub.github.io/MX-Returns/#api=<URL de la app /exec>&k=<código de acceso>
 ```
 
 La URL `/exec` y el código **no se guardan en este repositorio**: viajan solo en el enlace (después de `#`, que el navegador no envía a GitHub) y quedan en el teléfono.
