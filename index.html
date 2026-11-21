@@ -64,7 +64,7 @@ main{padding:10px 12px 90px}
 .tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:8px;font-weight:bold;color:var(--sub);font-size:15px}
 .tabs button.on{border-bottom-color:var(--pri);color:var(--pri)}
 #cola{position:fixed;bottom:0;left:0;right:0;background:#1c1f24;color:#fff;font-size:13px;padding:6px 12px;display:flex;justify-content:space-between}
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:40;padding:16px}
 #modal .box{background:#fff;border-radius:12px;padding:16px;width:100%;max-width:420px}
 #modal h3{margin:0 0 10px}
 #modal .opts{display:grid;gap:8px;margin:10px 0}
@@ -108,6 +108,7 @@ main{padding:10px 12px 90px}
  <div id="camFallback">
   <p id="camFbTxt">Esta página de Google no permite la cámara en vivo.<br>Toma una foto del código de barras: cada foto registra una guía.</p>
   <button class="btn" id="camFbBtn" style="padding:18px 24px;font-size:18px" onclick="$('camFoto').click()">📸 Tomar foto de la guía</button>
+  <button class="btn gray" id="camReintentar" onclick="reintentarVivo()">Reintentar cámara en vivo</button>
  </div>
  <div id="camAbajo">
   <div id="camUltimos"></div>
@@ -126,13 +127,18 @@ function localGet(k){try{return localStorage.getItem('ret_'+k);}catch(e){return 
 function localSet(k,v){try{localStorage.setItem('ret_'+k,v);}catch(e){}}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// Para valores dentro de onclick="fn('…')": escapa \ y ' para JS y luego para HTML (ej. un operador "D'Angelo").
+const escJs=s=>esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 // La misma pantalla funciona dentro de Apps Script (google.script.run) y como página propia
 // (GitHub Pages), donde habla con la API doPost del script usando la URL /exec y el código de acceso.
 const EN_APPS_SCRIPT=typeof google!=='undefined'&&google.script&&google.script.run;
+const URL_VALIDA=/^https:\/\/script\.google\.com\/[^\s#?]+\/exec$/;
 const API={url:localGet('api')||'',k:localGet('k')||''};
 (function leerEnlace(){ // enlace de configuración: ...#api=<URL /exec>&k=<código>
  const h=new URLSearchParams(location.hash.slice(1));
- if(h.get('api')){API.url=h.get('api').replace(/\/macros\/u\/\d+\//,'/macros/');localSet('api',API.url);}
+ // Solo se acepta una URL /exec de script.google.com (evita que un enlace falso mande los datos a otro servidor).
+ const api=(h.get('api')||'').replace(/\/macros\/u\/\d+\//,'/macros/');
+ if(api&&URL_VALIDA.test(api)){API.url=api;localSet('api',API.url);}
  if(h.get('k')){API.k=h.get('k').toUpperCase();localSet('k',API.k);}
  if(h.get('api')||h.get('k'))history.replaceState(null,'',location.pathname+location.search);
 })();
@@ -153,7 +159,8 @@ function configurar(aviso){
 function guardarConfig(){
  // Quita el número de cuenta (/u/1/) que Google agrega cuando hay varias cuentas abiertas.
  API.url=$('cfgUrl').value.trim().replace(/\/macros\/u\/\d+\//,'/macros/');API.k=$('cfgK').value.trim().toUpperCase();
- if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(API.url)){toast('La URL debe terminar en /exec','err');return;}
+ if(!URL_VALIDA.test(API.url)){toast('La URL debe ser de script.google.com y terminar en /exec','err');return;}
+ if(!API.k){toast('Escribe el código de acceso','err');return;}
  localSet('api',API.url);localSet('k',API.k);cerrarModal();iniciar();
 }
 
@@ -179,12 +186,12 @@ function mensajeConexion(e){const m=String(e&&e.message||e);
 function pintarContexto(){
  const c=S.cfg;if(!c)return;
  $('op').textContent=S.operador||'Elegir operador';
- $('dest').innerHTML=c.destinatarios.map(d=>`<button class="${d===S.destinatario?'on':''} ${S.actual&&S.actual.sugerenciaDestino===d&&d!==S.destinatario?'sug':''}" onclick="setDest('${esc(d)}')">${esc(d)}</button>`).join('');
+ $('dest').innerHTML=c.destinatarios.map(d=>`<button class="${d===S.destinatario?'on':''} ${S.actual&&S.actual.sugerenciaDestino===d&&d!==S.destinatario?'sug':''}" onclick="setDest('${escJs(d)}')">${esc(d)}</button>`).join('');
  const esB=S.destinatario==='BringGo';$('ubic').classList.toggle('hide',!esB);
  document.querySelectorAll('#tipo button').forEach(b=>b.classList.toggle('on',b.dataset.t===S.tipo));
  $('racks').innerHTML=c.racks.map(r=>{const x=S.resumen.racks[r]||{},n=r.replace(/\D/g,'');
   const det=S.tipo==='Bolsa'?(x.bolsaAbierta?x.bolsaAbierta.replace('Bolsa ','B')+' · '+(x.enBolsaAbierta||0):'sin bolsa'):(x.rack||0)+' este mes';
-  return `<button class="${S.tipo!=='Bolsa'&&r===S.rack?'on':''}" onclick="setRack('${esc(r)}')">R${n}<small>${esc(det)}</small></button>`;}).join('');
+  return `<button class="${S.tipo!=='Bolsa'&&r===S.rack?'on':''}" onclick="setRack('${escJs(r)}')">R${n}<small>${esc(det)}</small></button>`;}).join('');
  $('ubicHint').textContent=S.tipo==='Bolsa'
   ?'La app elige la bolsa según la paquetería. Toca un rack para marcar su bolsa como llena.'
   :'Paquete grande: elige el rack (o déjalo vacío y asígnalo después).';
@@ -192,7 +199,7 @@ function pintarContexto(){
 function elegirOperador(){
  if(!S.cfg){if(!EN_APPS_SCRIPT)configurar('Primero conecta el teléfono con la hoja.');else toast('Sin conexión con la hoja','err');return;}
  const ops=S.cfg.operadores||[];
- modal(`<h3>¿Quién escanea?</h3><div class="opts">${ops.map(o=>`<button onclick="setOp('${esc(o)}')">${esc(o)}</button>`).join('')}</div>
+ modal(`<h3>¿Quién escanea?</h3><div class="opts">${ops.map(o=>`<button onclick="setOp('${escJs(o)}')">${esc(o)}</button>`).join('')}</div>
   <p class="meta">Para agregar operadores, edita la columna Operador en la pestaña Catálogos.</p>`);
 }
 function setOp(o){S.operador=o;localSet('op',o);cerrarModal();pintarContexto();foco();}
@@ -202,7 +209,10 @@ function setOp(o){S.operador=o;localSet('op',o);cerrarModal();pintarContexto();f
 // (o después de tocar "Corregir ubicación" en su tarjeta).
 const VENTANA_MS=20000;
 function enVentana(a){return !!(a&&a.tipo==='registrado'&&a.ts&&Date.now()-a.ts<=VENTANA_MS);}
-function setDest(d){S.destinatario=d;localSet('dest',d);aplicarAlActual({destinatario:d,rack:d==='BringGo'?S.rack:'',tipo:S.tipo});pintarContexto();foco();}
+function setDest(d){S.destinatario=d;localSet('dest',d);
+ // En modo Bolsa no se manda rack: el servidor lo elige por paquetería. En modo Rack se manda el rack elegido.
+ const c={destinatario:d,tipo:S.tipo};if(d!=='BringGo')c.rack='';else if(S.tipo==='Rack')c.rack=S.rack;
+ aplicarAlActual(c);pintarContexto();foco();}
 function setTipo(t){S.tipo=t;localSet('tipo',t);
  if(S.destinatario==='BringGo')aplicarAlActual(t==='Bolsa'?{tipo:'Bolsa',destinatario:'BringGo'}:{tipo:'Rack',rack:S.rack,destinatario:'BringGo'});
  pintarContexto();foco();}
@@ -269,6 +279,7 @@ function selectorPaq(it,pre){pre=pre||'a';const val=elegido(it);
 }
 function corregirUbicacion(){if(S.actual){S.actual.ts=Date.now();pintarActual();toast('Toca destinatario o rack para corregir '+S.actual.id,'ok');}}
 function pintarActual(){
+ if(menuAbiertoEn('actual')){redibujar.actual=true;return;}redibujar.actual=false;
  const a=S.actual,el=$('actual');if(!a){el.classList.add('hide');return;}
  el.className='card '+clase(a);
  el.innerHTML=`<p class="lbl">Último paquete · ${esc(a.id)} · ${esc(a.fecha||'')}</p><div class="guia">${esc(a.guia)}</div>
@@ -276,10 +287,11 @@ function pintarActual(){
   ${a.ubicacion==='Bolsa'&&a.bolsa?`<div class="dest">📦 Poner en ${esc(a.bolsa)} · ${esc(a.rack)}</div>`:''}
   ${a.estado!=='Confirmado'?selectorPaq(a):''}
   ${selectorRack(a,'a')}
-  <div class="meta" id="ventanaTxt">${enVentana(a)?'Tocar destinatario o rack ahora corrige este paquete.':`<button class="btn gray" onclick="corregirUbicacion()">Corregir ubicación</button>`}</div>`;
+  <div class="meta" id="ventanaTxt">${textoVentana(a)}</div>`;
 }
 // Cuando vence la ventana, la tarjeta cambia al botón "Corregir ubicación".
-setInterval(()=>{const a=S.actual;if(a&&a.ts&&!a.ventanaVencida&&!enVentana(a)){a.ventanaVencida=true;pintarActual();}
+function textoVentana(a){return enVentana(a)?'Tocar destinatario o rack ahora corrige este paquete.':`<button class="btn gray" onclick="corregirUbicacion()">Corregir ubicación</button>`;}
+setInterval(()=>{const a=S.actual;if(a&&a.ts&&!a.ventanaVencida&&!enVentana(a)){a.ventanaVencida=true;const v=$('ventanaTxt');if(v)v.innerHTML=textoVentana(a);}
  if(a&&enVentana(a))a.ventanaVencida=false;},1000);
 function confirmarPaq(id,forzar,pre,valor){
  const sel=$('sel_'+pre+'_'+id),p=valor||(sel&&sel.value);if(!p){toast('Elige la paquetería','warn');return;}
@@ -295,27 +307,36 @@ function confirmarPaq(id,forzar,pre,valor){
 
 // ---- Lista de la sesión ----
 function agregarItem(it){it.k=Date.now()+Math.random();S.items.unshift(it);if(S.items.length>200)S.items.pop();pintarLista();}
+// Si el operador tiene abierto un menú en la lista o en la tarjeta, se espera a que lo cierre para redibujar.
+function menuAbiertoEn(id){const a=document.activeElement,c=$(id);return !!(a&&a.tagName==='SELECT'&&c&&c.contains(a));}
+let redibujar={lista:false,actual:false};
+document.addEventListener('focusout',ev=>{if(ev.target&&ev.target.tagName==='SELECT')setTimeout(()=>{
+ if(redibujar.lista&&!menuAbiertoEn('lista'))pintarLista();if(redibujar.actual&&!menuAbiertoEn('actual'))pintarActual();},0);});
 function pintarLista(){pintarCamUltimos();
+ if(menuAbiertoEn('lista')){redibujar.lista=true;return;}redibujar.lista=false;
  $('lista').innerHTML=S.items.map((it,i)=>{
   if(it.tipo==='duplicado')return `<div class="it err"><div class="row"><span class="guia">${esc(it.guia)}</span><b>DUPLICADO</b></div>
    <div class="meta">Ya registrado${it.original.id?' como '+esc(it.original.id):''}${it.original.fecha?' el '+esc(it.original.fecha):''}${it.original.paqueteria?' · '+esc(it.original.paqueteria):''}${it.original.rack?' · '+esc(it.original.rack):''}</div>
-   ${it.hecho?`<div class="meta">${esc(it.hecho)}</div>`:`<div class="acts"><button class="btn gray" onclick="eliminarDup(${i})">Eliminar</button><button class="btn err" onclick="reportarDup(${i})">Reportar</button></div>`}</div>`;
+   ${it.hecho?`<div class="meta">${esc(it.hecho)}</div>`:`<div class="acts"><button class="btn gray" onclick="eliminarDup('${it.k}')">Eliminar</button><button class="btn err" onclick="reportarDup('${it.k}')">Reportar</button></div>`}</div>`;
   if(it.tipo==='error')return `<div class="it err"><div class="row"><span class="guia">${esc(it.guia)}</span><b>SIN GUARDAR</b></div><div class="meta">${esc(it.mensaje)}</div>
-   <div class="acts"><button class="btn" onclick="reintentar(${i})">Reintentar</button><button class="btn gray" onclick="quitar(${i})">Quitar</button></div></div>`;
+   <div class="acts"><button class="btn" onclick="reintentar('${it.k}')">Reintentar</button><button class="btn gray" onclick="quitar('${it.k}')">Quitar</button></div></div>`;
   return `<div class="it ${clase(it)}"><div class="row"><span class="guia">${esc(it.guia)}</span><span>${esc(it.id)}</span></div>
    <div class="meta"><b>${esc(it.paqueteria)}</b> · ${esc(it.estado)} · ${esc(ubicTxt(it))}</div>${it.estado!=='Confirmado'&&it!==S.actual?selectorPaq(it,'s'):''}${it!==S.actual?selectorRack(it,'s'):''}</div>`;
  }).join('');
 }
-function eliminarDup(i){const it=S.items[i];run('appDescartarDuplicado',it,S.operador).catch(()=>{});S.items.splice(i,1);pintarLista();foco();}
-function reportarDup(i){
- modal(`<h3>Reportar duplicado</h3><p class="guia">${esc(S.items[i].guia)}</p><textarea id="nota" rows="3" placeholder="Ej. llegó 2 veces, etiqueta repetida"></textarea>
-  <div class="opts"><button onclick="enviarReporte(${i})">Guardar reporte</button><button onclick="cerrarModal();foco()">Cancelar</button></div>`,true);
+// Las acciones usan la clave única del elemento (it.k): la posición cambia con cada escaneo nuevo.
+function itemDe(k){return S.items.find(x=>String(x.k)===String(k));}
+function sacarItem(k){const i=S.items.findIndex(x=>String(x.k)===String(k));return i<0?null:S.items.splice(i,1)[0];}
+function eliminarDup(k){const it=sacarItem(k);if(!it)return;run('appDescartarDuplicado',it,S.operador).catch(()=>{});pintarLista();foco();}
+function reportarDup(k){const it=itemDe(k);if(!it)return;
+ modal(`<h3>Reportar duplicado</h3><p class="guia">${esc(it.guia)}</p><textarea id="nota" rows="3" placeholder="Ej. llegó 2 veces, etiqueta repetida"></textarea>
+  <div class="opts"><button onclick="enviarReporte('${it.k}')">Guardar reporte</button><button onclick="cerrarModal();foco()">Cancelar</button></div>`,true);
  setTimeout(()=>$('nota').focus(),50);
 }
-function enviarReporte(i){const it=S.items[i],nota=$('nota').value.trim();cerrarModal();
+function enviarReporte(k){const it=itemDe(k),nota=$('nota').value.trim();cerrarModal();if(!it)return;
  run('appReportarDuplicado',it,nota,S.operador).then(()=>{it.hecho='Reportado: '+(nota||'sin nota');pintarLista();foco();}).catch(e=>toast('No se guardó el reporte: '+e.message,'err'));}
-function reintentar(i){const it=S.items.splice(i,1)[0];pintarLista();S.cola.push(it.job);procesarCola();}
-function quitar(i){S.items.splice(i,1);pintarLista();foco();}
+function reintentar(k){const it=sacarItem(k);if(!it)return;pintarLista();S.cola.push(it.job);procesarCola();}
+function quitar(k){sacarItem(k);pintarLista();foco();}
 
 // ---- Pendientes en la hoja ----
 function tab(t){$('tabS').classList.toggle('on',t==='S');$('tabP').classList.toggle('on',t==='P');$('tabR').classList.toggle('on',t==='R');
@@ -354,7 +375,7 @@ function pintarSinRack(conservar){if(!S.sinRack)return;
 function bolsaLlena(rack){const x=S.resumen.racks[rack]||{};
  if(!x.bolsaAbierta){toast(rack+' no tiene bolsa abierta','warn');return;}
  modal(`<h3>¿${esc(x.bolsaAbierta)} está llena?</h3><p>${x.enBolsaAbierta||0} paquetes. Se cierra y se abre una bolsa nueva frente a ${esc(rack)}.</p>
-  <div class="opts"><button onclick="cerrarBolsa('${esc(rack)}')">Sí, bolsa llena</button><button onclick="cerrarModal();foco()">Cancelar</button></div>`,true);}
+  <div class="opts"><button onclick="cerrarBolsa('${escJs(rack)}')">Sí, bolsa llena</button><button onclick="cerrarModal();foco()">Cancelar</button></div>`,true);}
 function cerrarBolsa(rack){cerrarModal();run('appCerrarBolsa',rack,S.operador).then(r=>{toast((r.cerrada?r.cerrada+' cerrada. ':'')+'Nueva: '+r.nueva,'ok');refrescarResumen();foco();}).catch(e=>toast(e.message,'err'));}
 
 
@@ -427,14 +448,17 @@ function lecturaVideo(g){
  if(camCand.n>=2)recibirLectura(g);
 }
 function recibirLectura(g){
- const ahora=Date.now();if(g===camUltimo.v&&ahora-camUltimo.t<3000)return; // misma etiqueta frente a la cámara
+ // Misma etiqueta que sigue frente a la cámara: se ignora y se renueva el tiempo, para que no salga como duplicado.
+ // Si la cámara deja de verla más de 3 s y vuelve, sí se manda (y el servidor la marca si ya existe).
+ const ahora=Date.now();if(g===camUltimo.v&&ahora-camUltimo.t<3000){camUltimo.t=ahora;return;}
  camUltimo={v:g,t:ahora};marcarCam('ok',g);encolar(g);
 }
 // Apps Script muestra la app dentro de un marco sin permiso de cámara: getUserMedia falla sin preguntar.
 // Se revisa la política del marco antes de intentarlo y, si no la permite, se abre directo la cámara de fotos
 // (el clic del botón todavía cuenta como acción del usuario, que el navegador exige para abrirla).
+function politicaPermiteCamara(){try{const pp=document.permissionsPolicy||document.featurePolicy;if(pp&&pp.allowsFeature)return pp.allowsFeature('camera');}catch(e){}return null;}
 function camaraEnVivoPermitida(){
- try{const pp=document.permissionsPolicy||document.featurePolicy;if(pp&&pp.allowsFeature)return pp.allowsFeature('camera');}catch(e){}
+ const pol=politicaPermiteCamara();if(pol!==null)return pol;
  try{if(localGet('sinVivo')==='1')return false;}catch(e){}
  return true;
 }
@@ -461,9 +485,10 @@ async function abrirCamara(){
  },detector?200:450);
 }
 function mostrarFallback(err){
- // Si la cámara en vivo falló una vez, la próxima vez se va directo a la foto.
- if(err)localSet('sinVivo','1');
+ // Solo si el navegador negó el permiso se recuerda ir directo a la foto (una cámara ocupada es temporal).
+ if(err&&(err.name==='NotAllowedError'||err.name==='SecurityError'))localSet('sinVivo','1');
  $('camMsg').textContent='';$('camFbBtn').textContent='📸 Tomar foto de la guía';
+ $('camReintentar').style.display=politicaPermiteCamara()===false?'none':''; // dentro de Apps Script nunca hay cámara en vivo
  $('camFallback').style.display='flex';
 }
 async function leerFoto(input){
@@ -481,8 +506,9 @@ async function alternarLuz(){
  const p=camStream&&camStream.getVideoTracks()[0];if(!p)return;luz=!luz;
  try{await p.applyConstraints({advanced:[{torch:luz}]});}catch(e){luz=false;}
 }
+function reintentarVivo(){localSet('sinVivo','');cerrarCamara();abrirCamara();}
 function cerrarCamara(){
- camAbierta=false;clearInterval(camTimer);camTimer=null;
+ camAbierta=false;clearInterval(camTimer);camTimer=null;camCand={v:'',n:0,t:0};
  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
  $('camVideo').srcObject=null;$('cam').style.display='none';luz=false;foco();
 }
@@ -498,7 +524,9 @@ let kb=false;function toggleKb(){kb=!kb;$('scan').setAttribute('inputmode',kb?'t
 let modalAbierto=false;
 function modal(html,bloquea){$('mbox').innerHTML=html;$('modal').style.display='flex';modalAbierto=true;}
 function cerrarModal(){$('modal').style.display='none';modalAbierto=false;}
-function toast(m,t){$('estadoCola').textContent=m;if(t!=='ok')aviso(t==='err'?'err':'warn');setTimeout(()=>{if(!S.procesando)$('estadoCola').textContent='Listo';},4000);}
+let toastTimer=null;
+function toast(m,t){$('estadoCola').textContent=m;if(camAbierta)$('camMsg').textContent=m;if(t!=='ok')aviso(t==='err'?'err':'warn');
+ clearTimeout(toastTimer);toastTimer=setTimeout(()=>{if(!S.procesando)$('estadoCola').textContent='Listo';},4000);}
 function foco(){if(!camAbierta&&!modalAbierto&&document.activeElement&&document.activeElement.tagName!=='SELECT')$('scan').focus();}
 // El lector escribe como teclado: muchos caracteres seguidos (menos de LECTOR_MS entre teclas) y Enter.
 // Si el foco no está en el campo de escaneo (menú abierto, diálogo, nota), esas teclas se capturan aquí
@@ -529,7 +557,8 @@ document.addEventListener('keydown',ev=>{
 },true);
 // Mantener el foco en el campo de escaneo salvo cuando se usa un menú o un diálogo.
 document.addEventListener('click',ev=>{if(!['SELECT','OPTION','TEXTAREA'].includes(ev.target.tagName))setTimeout(foco,0);});
-document.addEventListener('change',()=>setTimeout(foco,0));
+// Al elegir en un menú se suelta el foco: así la lista se puede redibujar y el campo de escaneo vuelve a recibir lecturas.
+document.addEventListener('change',ev=>{if(ev.target&&ev.target.tagName==='SELECT')ev.target.blur();setTimeout(foco,0);});
 setInterval(()=>{if(document.activeElement===document.body)foco();},1500);
 iniciar();
 </script>
