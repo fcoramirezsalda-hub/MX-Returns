@@ -381,7 +381,7 @@ async function prepararLector(){
  const r=new Z.MultiFormatReader();r.setHints(h);zx={Z,r};
 }
 // Valida que la lectura parezca una guía: descarta los PDF417/QR largos de FedEx y similares.
-function guiaValida(t){const g=String(t||'').replace(/^\]C1/i,'').replace(/[\s\x1d]/g,'');return /^[A-Za-z0-9-]{6,40}$/.test(g)?g:'';}
+function guiaValida(t){const g=String(t||'').replace(/^\]C1/i,'').replace(/[\s\x1d]/g,'');return /^[A-Za-z0-9][A-Za-z0-9-]{4,38}[A-Za-z0-9]$/.test(g)?g:'';} // sin guion al inicio ni al final
 function elegirLectura(lecturas){ // lecturas: [{texto, formato}]; prefiere códigos de barras lineales
  const val=lecturas.map(l=>({g:guiaValida(l.texto),lineal:FORMATOS_1D.includes(l.formato)})).filter(l=>l.g);
  val.sort((a,b)=>(b.lineal-a.lineal)||(b.g.length-a.g.length));
@@ -417,6 +417,15 @@ async function detectar(fuente,ancho,alto,foto){
  return g;
 }
 function marcarCam(clase,texto){const g=$('camGuia');g.className=clase||'';if(texto!==undefined)$('camLeido').textContent=texto;if(clase)setTimeout(()=>{g.className='';},700);}
+// Cámara en vivo: una lectura solo cuenta si el mismo texto se lee 2 veces seguidas (en menos de 1.5 s).
+// Así se descartan lecturas con un carácter equivocado, que salen una sola vez.
+let camCand={v:'',n:0,t:0};
+function lecturaVideo(g){
+ const ahora=Date.now();
+ if(g===camCand.v&&ahora-camCand.t<1500)camCand.n++;else camCand={v:g,n:1,t:ahora};
+ camCand.t=ahora;
+ if(camCand.n>=2)recibirLectura(g);
+}
 function recibirLectura(g){
  const ahora=Date.now();if(g===camUltimo.v&&ahora-camUltimo.t<3000)return; // misma etiqueta frente a la cámara
  camUltimo={v:g,t:ahora};marcarCam('ok',g);encolar(g);
@@ -448,7 +457,7 @@ async function abrirCamara(){
  let ocupado=false;
  camTimer=setInterval(async()=>{
   if(ocupado||!camAbierta||v.readyState<2)return;ocupado=true;
-  try{const g=await detectar(v,v.videoWidth,v.videoHeight);if(g)recibirLectura(g);}catch(e){}finally{ocupado=false;}
+  try{const g=await detectar(v,v.videoWidth,v.videoHeight);if(g)lecturaVideo(g);}catch(e){}finally{ocupado=false;}
  },detector?200:450);
 }
 function mostrarFallback(err){
