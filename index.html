@@ -57,7 +57,10 @@ main{padding:10px 12px 90px}
 #lista .it.ok{border-left-color:var(--ok)}#lista .it.warn{border-left-color:var(--warn)}#lista .it.err{border-left-color:var(--err);background:var(--errbg)}
 #lista .row{display:flex;justify-content:space-between;gap:6px;align-items:center}
 #lista .acts{display:flex;gap:6px;margin-top:6px}
-.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:8px}
+.dest{margin-top:8px;padding:10px;border-radius:8px;background:#1c1f24;color:#fff;font-size:18px;font-weight:bold;text-align:center}
+.rackSel{display:flex;gap:6px;align-items:center;margin-top:8px}
+.rackSel select{flex:1;font-size:16px;padding:10px;border-radius:8px;border:2px solid var(--pri);background:#fff}
 .tabs button{border:0;border-bottom:3px solid transparent;background:none;padding:8px;font-weight:bold;color:var(--sub);font-size:15px}
 .tabs button.on{border-bottom-color:var(--pri);color:var(--pri)}
 #cola{position:fixed;bottom:0;left:0;right:0;background:#1c1f24;color:#fff;font-size:13px;padding:6px 12px;display:flex;justify-content:space-between}
@@ -83,17 +86,18 @@ main{padding:10px 12px 90px}
    <button data-t="Rack" onclick="setTipo('Rack')">Rack</button>
    <button data-t="Bolsa" onclick="setTipo('Bolsa')">Bolsa (paquete chico)</button>
   </div>
+  <p class="meta" id="ubicHint"></p>
   <div class="racks" id="racks"></div>
-  <div id="bolsaInfo" class="hide"><span id="bolsaTxt"></span><button id="bolsaLlena" onclick="bolsaLlena()">Bolsa llena</button></div>
  </section>
  <section class="card">
   <p class="lbl">Escanear guía</p>
   <div id="scanRow"><input id="scan" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="none" placeholder="Escanee aquí"><button id="camBtn" onclick="abrirCamara()" title="Escanear con cámara">📷</button><button id="kb" onclick="toggleKb()" title="Teclado">⌨</button></div>
  </section>
  <section class="card hide" id="actual"></section>
- <div class="tabs"><button id="tabS" class="on" onclick="tab('S')">Esta sesión</button><button id="tabP" onclick="tab('P')">Por confirmar</button></div>
+ <div class="tabs"><button id="tabS" class="on" onclick="tab('S')">Esta sesión</button><button id="tabP" onclick="tab('P')">Por confirmar</button><button id="tabR" onclick="tab('R')">Sin rack</button></div>
  <section id="lista"></section>
  <section id="pend" class="hide"></section>
+ <section id="sinRack" class="hide"></section>
 </main>
 <div id="cola"><span id="estadoCola">Listo</span><span id="conteo">0 escaneos</span></div>
 <div id="modal"><div class="box" id="mbox"></div></div>
@@ -173,10 +177,10 @@ function pintarContexto(){
  document.querySelectorAll('#tipo button').forEach(b=>b.classList.toggle('on',b.dataset.t===S.tipo));
  $('racks').innerHTML=c.racks.map(r=>{const x=S.resumen.racks[r]||{},n=r.replace(/\D/g,'');
   const det=S.tipo==='Bolsa'?(x.bolsaAbierta?x.bolsaAbierta.replace('Bolsa ','B')+' · '+(x.enBolsaAbierta||0):'sin bolsa'):(x.rack||0)+' este mes';
-  return `<button class="${r===S.rack?'on':''}" onclick="setRack('${esc(r)}')">R${n}<small>${esc(det)}</small></button>`;}).join('');
- const x=S.resumen.racks[S.rack]||{};
- $('bolsaInfo').classList.toggle('hide',!(esB&&S.tipo==='Bolsa'&&S.rack));
- $('bolsaTxt').textContent=x.bolsaAbierta?`${x.bolsaAbierta}: ${x.enBolsaAbierta||0} paquetes (${S.cfg.capacidadBolsa} L)`:'Se abrirá una bolsa nueva al registrar';
+  return `<button class="${S.tipo!=='Bolsa'&&r===S.rack?'on':''}" onclick="setRack('${esc(r)}')">R${n}<small>${esc(det)}</small></button>`;}).join('');
+ $('ubicHint').textContent=S.tipo==='Bolsa'
+  ?'La app elige la bolsa según la paquetería. Toca un rack para marcar su bolsa como llena.'
+  :'Paquete grande: elige el rack (o déjalo vacío y asígnalo después).';
 }
 function elegirOperador(){
  const ops=(S.cfg&&S.cfg.operadores)||[];
@@ -191,9 +195,13 @@ function setOp(o){S.operador=o;localSet('op',o);cerrarModal();pintarContexto();f
 const VENTANA_MS=20000;
 function enVentana(a){return !!(a&&a.tipo==='registrado'&&a.ts&&Date.now()-a.ts<=VENTANA_MS);}
 function setDest(d){S.destinatario=d;localSet('dest',d);aplicarAlActual({destinatario:d,rack:d==='BringGo'?S.rack:'',tipo:S.tipo});pintarContexto();foco();}
-function setTipo(t){S.tipo=t;localSet('tipo',t);if(S.destinatario==='BringGo'&&S.rack)aplicarAlActual({tipo:t,rack:S.rack,destinatario:'BringGo'});pintarContexto();foco();}
-function setRack(r){S.rack=r;localSet('rack',r);aplicarAlActual({rack:r,tipo:S.tipo,destinatario:'BringGo'});pintarContexto();foco();}
-function ctxActual(){return {operador:S.operador,destinatario:S.destinatario,tipo:S.tipo,rack:S.destinatario==='BringGo'?S.rack:''};}
+function setTipo(t){S.tipo=t;localSet('tipo',t);
+ if(S.destinatario==='BringGo')aplicarAlActual(t==='Bolsa'?{tipo:'Bolsa',destinatario:'BringGo'}:{tipo:'Rack',rack:S.rack,destinatario:'BringGo'});
+ pintarContexto();foco();}
+// En modo Bolsa el rack lo decide la app: tocar un rack sirve para marcar su bolsa como llena.
+function setRack(r){if(S.tipo==='Bolsa'){bolsaLlena(r);return;}
+ S.rack=r;localSet('rack',r);aplicarAlActual({rack:r,tipo:'Rack',destinatario:'BringGo'});pintarContexto();foco();}
+function ctxActual(){return {operador:S.operador,destinatario:S.destinatario,tipo:S.tipo,rack:S.destinatario==='BringGo'&&S.tipo==='Rack'?S.rack:''};}
 
 function aplicarAlActual(c){
  const a=S.actual;if(!a||a.tipo!=='registrado')return;
@@ -257,7 +265,9 @@ function pintarActual(){
  el.className='card '+clase(a);
  el.innerHTML=`<p class="lbl">Último paquete · ${esc(a.id)} · ${esc(a.fecha||'')}</p><div class="guia">${esc(a.guia)}</div>
   <div class="meta"><b>${esc(a.paqueteria)}</b> · ${esc(a.estado)}${a.estado==='Inferido'?' ('+Math.round((a.confianza||0)*1000)/10+'%)':''} · ${esc(ubicTxt(a))}</div>
+  ${a.ubicacion==='Bolsa'&&a.bolsa?`<div class="dest">📦 Poner en ${esc(a.bolsa)} · ${esc(a.rack)}</div>`:''}
   ${a.estado!=='Confirmado'?selectorPaq(a):''}
+  ${selectorRack(a,'a')}
   <div class="meta" id="ventanaTxt">${enVentana(a)?'Tocar destinatario o rack ahora corrige este paquete.':`<button class="btn gray" onclick="corregirUbicacion()">Corregir ubicación</button>`}</div>`;
 }
 // Cuando vence la ventana, la tarjeta cambia al botón "Corregir ubicación".
@@ -285,7 +295,7 @@ function pintarLista(){pintarCamUltimos();
   if(it.tipo==='error')return `<div class="it err"><div class="row"><span class="guia">${esc(it.guia)}</span><b>SIN GUARDAR</b></div><div class="meta">${esc(it.mensaje)}</div>
    <div class="acts"><button class="btn" onclick="reintentar(${i})">Reintentar</button><button class="btn gray" onclick="quitar(${i})">Quitar</button></div></div>`;
   return `<div class="it ${clase(it)}"><div class="row"><span class="guia">${esc(it.guia)}</span><span>${esc(it.id)}</span></div>
-   <div class="meta"><b>${esc(it.paqueteria)}</b> · ${esc(it.estado)} · ${esc(ubicTxt(it))}</div>${it.estado!=='Confirmado'&&it!==S.actual?selectorPaq(it,'s'):''}</div>`;
+   <div class="meta"><b>${esc(it.paqueteria)}</b> · ${esc(it.estado)} · ${esc(ubicTxt(it))}</div>${it.estado!=='Confirmado'&&it!==S.actual?selectorPaq(it,'s'):''}${it!==S.actual?selectorRack(it,'s'):''}</div>`;
  }).join('');
 }
 function eliminarDup(i){const it=S.items[i];run('appDescartarDuplicado',it,S.operador).catch(()=>{});S.items.splice(i,1);pintarLista();foco();}
@@ -300,18 +310,44 @@ function reintentar(i){const it=S.items.splice(i,1)[0];pintarLista();S.cola.push
 function quitar(i){S.items.splice(i,1);pintarLista();foco();}
 
 // ---- Pendientes en la hoja ----
-function tab(t){$('tabS').classList.toggle('on',t==='S');$('tabP').classList.toggle('on',t==='P');$('lista').classList.toggle('hide',t!=='S');$('pend').classList.toggle('hide',t!=='P');
+function tab(t){$('tabS').classList.toggle('on',t==='S');$('tabP').classList.toggle('on',t==='P');$('tabR').classList.toggle('on',t==='R');
+ $('lista').classList.toggle('hide',t!=='S');$('pend').classList.toggle('hide',t!=='P');$('sinRack').classList.toggle('hide',t!=='R');
+ if(t==='R'){$('sinRack').innerHTML='<p class="meta">Cargando…</p>';run('appSinRack').then(p=>{S.sinRack=p;pintarSinRack();}).catch(e=>$('sinRack').innerHTML='<p class="meta">'+esc(e.message)+'</p>');}
  if(t==='P'){$('pend').innerHTML='<p class="meta">Cargando…</p>';run('appPendientes').then(p=>{S.pend=p;pintarPend();}).catch(e=>$('pend').innerHTML='<p class="meta">'+esc(e.message)+'</p>');}foco();}
 function pintarPend(){if(!S.pend)return;
  $('pend').innerHTML=S.pend.length?S.pend.map(it=>`<div class="it ${it.estado==='Confirmado'?'ok':'warn'}" style="display:flex;flex-direction:column;border-left:6px solid;padding:8px;margin-bottom:6px;background:#fff;border-radius:6px">
   <div class="row" style="display:flex;justify-content:space-between"><span class="guia">${esc(it.guia)}</span><span>${esc(it.id)}</span></div>
   <div class="meta">${esc(it.fecha)} · <b>${esc(it.paqueteria)}</b> · ${esc(it.estado)}${it.formato&&it.formato.length?' · formato '+esc(it.formato.join('/')):''}</div>${it.estado!=='Confirmado'?selectorPaq(it,'p'):''}</div>`).join(''):'<p class="meta">No hay paquetes por confirmar.</p>';}
 
+
+// ---- Rack de paquetes grandes: menú para asignarlo o cambiarlo después de escanear ----
+// Los racks de la paquetería del paquete aparecen primero, marcados con ★.
+function racksSugeridos(it){const m=S.cfg&&S.cfg.mapa;if(!m)return [];return it.racksSugeridos||(m.porPaq[it.paqueteria]||m.otras||[]);}
+function selectorRack(it,pre){
+ if(!S.cfg||it.tipo==='duplicado'||it.tipo==='error'||it.destinatario!=='BringGo'||it.ubicacion==='Bolsa')return '';
+ const sug=racksSugeridos(it),orden=sug.concat(S.cfg.racks.filter(r=>!sug.includes(r)));
+ const ops=orden.map(r=>`<option value="${esc(r)}" ${r===it.rack?'selected':''}>${sug.includes(r)?'★ ':''}${esc(r)}</option>`).join('');
+ return `<div class="rackSel"><span class="meta">Rack</span><select onchange="cambiarRack('${it.id}',this.value)"><option value="">Sin rack</option>${ops}</select></div>`;
+}
+function cambiarRack(id,rack){
+ run('appActualizar',id,{rack,tipo:'Rack',destinatario:'BringGo'},S.operador).then(r=>{
+  if(!r.ok){toast(r.error,'err');return;}
+  [S.actual,...S.items,...(S.sinRack||[])].forEach(it=>{if(it&&it.id===id)Object.assign(it,{rack:r.rack,ubicacion:r.ubicacion,bolsa:r.bolsa});});
+  toast(id+(rack?' → '+rack:' sin rack'),'ok');aviso('ok');pintarActual();pintarLista();pintarSinRack(true);refrescarResumen();foco();
+ }).catch(e=>toast('No se guardó el rack: '+e.message,'err'));
+}
+function pintarSinRack(conservar){if(!S.sinRack)return;
+ const lista=S.sinRack.filter(it=>conservar||!it.rack);
+ $('sinRack').innerHTML=lista.length?lista.map(it=>`<div class="it ${it.rack?'ok':'warn'}" style="display:flex;flex-direction:column;border-left:6px solid;padding:8px;margin-bottom:6px;background:#fff;border-radius:6px">
+  <div class="row" style="display:flex;justify-content:space-between"><span class="guia">${esc(it.guia)}</span><span>${esc(it.id)}</span></div>
+  <div class="meta">${esc(it.fecha)} · <b>${esc(it.paqueteria)}</b>${it.rack?' · '+esc(it.rack):''}</div>${selectorRack(it,'r')}</div>`).join(''):'<p class="meta">Todos los paquetes de BringGo tienen rack.</p>';}
+
 // ---- Bolsas ----
-function bolsaLlena(){const x=S.resumen.racks[S.rack]||{};
- modal(`<h3>¿Cerrar ${esc(x.bolsaAbierta||'la bolsa')}?</h3><p>${x.enBolsaAbierta||0} paquetes. Se abrirá una bolsa nueva frente a ${esc(S.rack)}.</p>
-  <div class="opts"><button onclick="cerrarBolsa()">Sí, bolsa llena</button><button onclick="cerrarModal();foco()">Cancelar</button></div>`,true);}
-function cerrarBolsa(){cerrarModal();run('appCerrarBolsa',S.rack,S.operador).then(r=>{toast((r.cerrada?r.cerrada+' cerrada. ':'')+'Nueva: '+r.nueva,'ok');refrescarResumen();foco();}).catch(e=>toast(e.message,'err'));}
+function bolsaLlena(rack){const x=S.resumen.racks[rack]||{};
+ if(!x.bolsaAbierta){toast(rack+' no tiene bolsa abierta','warn');return;}
+ modal(`<h3>¿${esc(x.bolsaAbierta)} está llena?</h3><p>${x.enBolsaAbierta||0} paquetes. Se cierra y se abre una bolsa nueva frente a ${esc(rack)}.</p>
+  <div class="opts"><button onclick="cerrarBolsa('${esc(rack)}')">Sí, bolsa llena</button><button onclick="cerrarModal();foco()">Cancelar</button></div>`,true);}
+function cerrarBolsa(rack){cerrarModal();run('appCerrarBolsa',rack,S.operador).then(r=>{toast((r.cerrada?r.cerrada+' cerrada. ':'')+'Nueva: '+r.nueva,'ok');refrescarResumen();foco();}).catch(e=>toast(e.message,'err'));}
 
 
 // ---- Escaneo con cámara ----
