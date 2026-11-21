@@ -20,8 +20,6 @@ main{padding:10px 12px 90px}
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .seg button,.racks button,.tipo button{border:2px solid var(--line);background:#fff;border-radius:8px;padding:12px 4px;font-size:15px;font-weight:bold;color:var(--txt)}
 .seg button.on,.racks button.on,.tipo button.on{border-color:var(--pri);background:#e8f0fe;color:var(--pri)}
-#ubic.falta{border:3px solid var(--err);background:var(--errbg)}
-#esperaRack{margin-top:8px;font-weight:bold;color:var(--err);font-size:15px}
 .seg button.sug{border-style:dashed;border-color:var(--warn)}
 .tipo{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px}
 .racks{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
@@ -86,7 +84,6 @@ main{padding:10px 12px 90px}
    <button data-t="Bolsa" onclick="setTipo('Bolsa')">Bolsa (paquete chico)</button>
   </div>
   <div class="racks" id="racks"></div>
-  <div id="esperaRack" class="hide"></div>
   <div id="bolsaInfo" class="hide"><span id="bolsaTxt"></span><button id="bolsaLlena" onclick="bolsaLlena()">Bolsa llena</button></div>
  </section>
  <section class="card">
@@ -120,7 +117,7 @@ main{padding:10px 12px 90px}
 </div>
 <script>
 const S={operador:localGet('op')||'',destinatario:localGet('dest')||'BringGo',tipo:localGet('tipo')||'Rack',rack:localGet('rack')||'',
- cfg:null,resumen:{racks:{}},cola:[],procesando:false,items:[],actual:null,vistos:{},n:0,elegidas:{},esperaRack:[]};
+ cfg:null,resumen:{racks:{}},cola:[],procesando:false,items:[],actual:null,vistos:{},n:0,elegidas:{}};
 function localGet(k){try{return localStorage.getItem('ret_'+k);}catch(e){return null;}}
 function localSet(k,v){try{localStorage.setItem('ret_'+k,v);}catch(e){}}
 const $=id=>document.getElementById(id);
@@ -169,7 +166,7 @@ function iniciar(){$('estadoCola').textContent='Conectando…';
  .catch(e=>{$('estadoCola').textContent='Sin conexión: '+e.message;});}
 
 function pintarContexto(){
- const c=S.cfg;if(!c)return;setTimeout(pintarEspera,0);
+ const c=S.cfg;if(!c)return;
  $('op').textContent=S.operador||'Elegir operador';
  $('dest').innerHTML=c.destinatarios.map(d=>`<button class="${d===S.destinatario?'on':''} ${S.actual&&S.actual.sugerenciaDestino===d&&d!==S.destinatario?'sug':''}" onclick="setDest('${esc(d)}')">${esc(d)}</button>`).join('');
  const esB=S.destinatario==='BringGo';$('ubic').classList.toggle('hide',!esB);
@@ -193,24 +190,11 @@ function setOp(o){S.operador=o;localSet('op',o);cerrarModal();pintarContexto();f
 // (o después de tocar "Corregir ubicación" en su tarjeta).
 const VENTANA_MS=20000;
 function enVentana(a){return !!(a&&a.tipo==='registrado'&&a.ts&&Date.now()-a.ts<=VENTANA_MS);}
-function setDest(d){S.destinatario=d;localSet('dest',d);if(liberarEspera()){pintarContexto();foco();return;}aplicarAlActual({destinatario:d,rack:d==='BringGo'?S.rack:'',tipo:S.tipo});pintarContexto();foco();}
+function setDest(d){S.destinatario=d;localSet('dest',d);aplicarAlActual({destinatario:d,rack:d==='BringGo'?S.rack:'',tipo:S.tipo});pintarContexto();foco();}
 function setTipo(t){S.tipo=t;localSet('tipo',t);if(S.destinatario==='BringGo'&&S.rack)aplicarAlActual({tipo:t,rack:S.rack,destinatario:'BringGo'});pintarContexto();foco();}
-function setRack(r){S.rack=r;localSet('rack',r);if(!liberarEspera())aplicarAlActual({rack:r,tipo:S.tipo,destinatario:'BringGo'});pintarContexto();foco();}
-// Un paquete de BringGo no se registra sin rack: la lectura espera aquí hasta que se elige el rack
-// (o se cambia a otro destinatario) y entonces se registra con esa ubicación.
-function liberarEspera(){
- if(!S.esperaRack.length||(S.destinatario==='BringGo'&&!S.rack))return false;
- const n=S.esperaRack.length;
- S.esperaRack.splice(0).forEach(raw=>S.cola.push({raw,ctx:ctxActual()}));
- pintarEspera();toast(n+(n===1?' guía registrada en ':' guías registradas en ')+(S.destinatario==='BringGo'?S.rack:S.destinatario),'ok');procesarCola();return true;
-}
+function setRack(r){S.rack=r;localSet('rack',r);aplicarAlActual({rack:r,tipo:S.tipo,destinatario:'BringGo'});pintarContexto();foco();}
 function ctxActual(){return {operador:S.operador,destinatario:S.destinatario,tipo:S.tipo,rack:S.destinatario==='BringGo'?S.rack:''};}
-function pintarEspera(){
- const n=S.esperaRack.length,el=$('esperaRack');
- $('ubic').classList.toggle('falta',n>0||(S.destinatario==='BringGo'&&!S.rack));
- el.classList.toggle('hide',!n);el.textContent=n?`${n} ${n===1?'guía espera':'guías esperan'} rack: elige un rack para registrar${n===1?'la':'las'}.`:'';
- if(camAbierta&&n)$('camMsg').textContent=`${n} en espera: cierra la cámara y elige el rack.`;
-}
+
 function aplicarAlActual(c){
  const a=S.actual;if(!a||a.tipo!=='registrado')return;
  if(!enVentana(a)){toast('Cambio aplicado a los siguientes paquetes','ok');return;}
@@ -232,7 +216,6 @@ function encolar(raw){
   agregarItem(dup);aviso('err');return;
  }
  S.vistos[clave]={pendiente:true};
- if(S.destinatario==='BringGo'&&!S.rack){S.esperaRack.push(raw);pintarEspera();aviso('warn');return;}
  S.cola.push({raw,ctx:ctxActual()});
  procesarCola();
 }
@@ -261,7 +244,7 @@ function refrescarResumen(){run('appResumen').then(r=>{S.resumen=r;pintarContext
 // ---- Paquete actual (paso 5) ----
 function clase(it){return it.tipo==='duplicado'||it.tipo==='error'?'err':it.estado==='Confirmado'?'ok':'warn';}
 function ubicTxt(it){if(it.destinatario!=='BringGo')return it.destinatario||'Sin destinatario';
- if(!it.rack)return 'BringGo · falta rack';return 'BringGo · '+it.rack+(it.ubicacion==='Bolsa'?' · '+it.bolsa:'');}
+ if(!it.rack)return 'BringGo · sin rack';return 'BringGo · '+it.rack+(it.ubicacion==='Bolsa'?' · '+it.bolsa:'');}
 // S.elegidas[id] guarda lo que el operador eligió en el menú; tiene prioridad sobre la sugerencia.
 function elegido(it){return S.elegidas[it.id]!==undefined?S.elegidas[it.id]:(it.sugerencia||(it.paqueteria!=='Por identificar'?it.paqueteria:''));}
 function selectorPaq(it,pre){pre=pre||'a';const val=elegido(it);
