@@ -242,9 +242,12 @@ function encolar(raw){
   agregarItem(dup);aviso('err');return;
  }
  S.vistos[clave]={pendiente:true};
- S.cola.push({raw,ctx:ctxActual()});
+ S.cola.push({raw,ctx:Object.assign(ctxActual(),{rid:nuevoRid()})});
  procesarCola();
 }
+// Identificador de cada lectura: si se pierde la respuesta y se reintenta, el servidor reconoce su propio registro.
+function nuevoRid(){try{if(crypto.randomUUID)return crypto.randomUUID();}catch(e){}
+ return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);}
 function claveLocal(raw){let g=String(raw).replace(/^\]C1/i,'').replace(/[\s\x1d]/g,'').toUpperCase();
  if(/^JJD/.test(g))return g.slice(1);
  if(/^(?:\d{20}00\d{12}|96\d{32})$/.test(g)){const t=g.slice(20);return t.startsWith('00')?t.slice(2):t;}
@@ -260,7 +263,10 @@ async function procesarCola(){
    if(r.tipo==='registrado'){r.ts=Date.now();S.vistos[clave]=r;S.actual=r;S.n++;agregarItem(r);aviso(r.estado==='Confirmado'?'ok':'warn');pintarActual();
     if(r.sugerenciaDestino&&r.sugerenciaDestino!==r.destinatario)toast('La referencia indica '+r.sugerenciaDestino+'. Toca el botón marcado si aplica.','warn');}
    else if(r.tipo==='duplicado'){S.vistos[clave]=r.original;agregarItem(r);aviso('err');}
-  }catch(e){delete S.vistos[claveLocal(job.raw)];
+  }catch(e){const clave=claveLocal(job.raw);delete S.vistos[clave];
+   // Una lectura repetida mientras este envío estaba pendiente se mostró como DUPLICADO, pero el original
+   // no se guardó: se quita esa tarjeta. Queda solo "SIN GUARDAR" con su botón Reintentar.
+   S.items=S.items.filter(x=>!(x.tipo==='duplicado'&&x.local&&x.clave===clave&&!x.original.id));
    agregarItem({tipo:'error',guia:job.raw,mensaje:e.message,job});aviso('err');}
  }
  S.procesando=false;$('estadoCola').textContent='Listo';$('conteo').textContent=S.n+' registrados';refrescarResumen();
